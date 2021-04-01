@@ -24,82 +24,14 @@ module.exports = {
     selectedtag: function () {},
   },
   methods: {
-    append: function (e, tag1, tag2) {
+    action: function (sourcefile, destfile) {
         // Using the confirm dialog, you can check if the user confirms the action before executing
         // If the result of the dialog is Yes, the callback continues and the file is manipulated.
         this.launchConfirmDialog('Would you like to continue?', () => {
-            this.translating = 'Appending ' + tag2 + ' onto ' + tag1;
-
-            // Using the subtitles service we can get the metadata for the files in the project.
-            var tl1 = this.appScope.subtitlesService.timelines[tag1];
-            var tl2 = this.appScope.subtitlesService.timelines[tag2];
-
-            // Content contains the title ids and beginning and end times.
-            var content1 = tl1.content;
-            var content2 = tl2.content;
-
-            // Get the id of the final title in the first file.
-            var insertafter = content1[content1.length - 1].i;
-
-            // You can log information to be viewed in the chrome developer tools.
-            console.log('insert after ' + insertafter);
-
-            var after = content1.length - 1;
-
-            var ids = [];
-            for (var i = 0; i < content2.length; i++) {
-                ids.push(content2[i].i);
-            }
-
-            // Using the subtitles service getContentText function you can get the text content of a title using their id(s).
-            res = this.appScope.subtitlesService.getContentText(tag2, ids);
-
-            // You can subscribe to the result of that function to access the data.
-            res.subscribe({
-                // different functions can be called through the subscription.
-                // On next, data is sent along to the subscribed.
-                next: content => {
-                    // Looping through the results of getContentText function you can access each titles string text.
-                    for (var i = 0; i < content.results.length; i++) {
-                        // Using the subtitles service you can insert titles into a file using it's tag.
-                        this.appScope.subtitlesService.insertContentText(
-                            tag1, // The file we want to add into
-                            content2[i].b, // The beginning of the title from the appending file
-                            content2[i].e, // The end of the title from the appending file
-                            after, // The title id, the last id from the file we're adding into.
-                            content.results[i].content, // The string content from the file we've read.
-                        );
-                        // Set the new 'last' id.
-                        after = content1.length - 1;
-                    }
-                },
-                // The error function is sent when there's an error, you can react to this and post logs
-                error: err => console.error('append got an error: ' + err),
-                // Once the function has succeeded the complete function is sent.
-                complete: () => console.log('append complete notification'),
-            });
+          // manipulate file from here.
+          console.log(sourcefile, destfile);
+          this.loaderDialogRef.close();
         })
-    },
-
-    // get list of available timelines
-    loadTagList: function () {
-      var tltags = Object.keys(this.appScope.subtitlesService.timelines);
-      // The projects files are stored locally.
-      this.subslist = [];
-      for (var i = 0; i < tltags.length; i++) {
-        var tl = this.appScope.subtitlesService.timelines[tltags[i]];
-        if (tl.metadata && tl.metadata.text) {
-          this.subslist.push(tltags[i]);
-        }
-      }
-      // populate the select boxes with the appropriate tags
-      if (this.subslist.length) {
-        this.selectedtag = this.subslist[0];
-        this.selectedtag2 = this.subslist[1];
-      } else {
-        this.selectedtag = '';
-        this.selectedtag2 = '';
-      }
     },
 
     // If your external widget has settings in it's config. The updateConfig function runs when you hit save.
@@ -117,42 +49,15 @@ module.exports = {
     },
 
     onClickAlign: function () {
-      this.selectedtag = this.menuX(this.dialogContent, 'selectfile', 'value');
-      this.selectedtag2 = this.menuX(this.dialogContent, 'selectfile2', 'value');
-      if (this.selectedtag && this.selectedtag2 && this.selectedtag !== this.selectedtag2) {
-        this.append(null, this.selectedtag, this.selectedtag2);
+      this.sourcefile = this.menuX(this.dialogContent, 'sourcefile', 'value');
+      this.destfile = this.menuX(this.dialogContent, 'destfile', 'value');
+      if (this.sourcefile && this.destfile) {
+        this.action(this.sourcefile, this.destfile);
       }
     },
 
     // A custom function that runs when the dialog opens.
     onLaunchCustomDialog: function (item) {
-      this.loadTagList();
-      if (item.parent && item.parent.data) {
-        this.selectedtag = item.parent.data.timelineid;
-      }
-
-      // Using menuX you can populate dialog fields with values loaded from the project.
-      this.menuX(this.dialogContent, 'selectfile', 'options', this.subslist);
-      this.menuX(this.dialogContent, 'selectfile', 'value', this.selectedtag);
-      if (
-        (this.subslist.length > 0 && !this.selectedtag) ||
-        (this.subslist.length > 0 && this.subslist.indexOf(this.selectedtag) < 0)
-      ) {
-        this.selectedtag = this.subslist[0];
-        this.getDefaults();
-        this.menuSet('selectfile', 'value', this.subslist[0]);
-      }
-      this.menuX(this.dialogContent, 'selectfile2', 'options', this.subslist);
-      this.menuX(this.dialogContent, 'selectfile2', 'value', this.selectedtag2);
-      if (
-        (this.subslist.length > 1 && !this.selectedtag2) ||
-        (this.subslist.length > 1 && this.subslist.indexOf(this.selectedtag2) < 0)
-      ) {
-        this.selectedtag2 = this.subslist[1];
-        this.getDefaults();
-        this.menuSet('selectfile2', 'value', this.subslist[1]);
-      }
-
       // This actually loads the dialog with the appropriate dialogContent.
       this.loaderDialogRef = this.appScope.dialogService.openDialog(
         'Custom',
@@ -174,6 +79,237 @@ module.exports = {
         },
         result => result ? cb() : cancelcb && cancelcb()
         );
+    },
+
+    // File browse dialog for the source file
+    onClickSourcefile: function () {
+      let srcfile = this.menuX(this.dialogContent, 'sourcefile', 'value');
+
+      let srcpath = '';
+      if (srcfile) {
+        let srcsplt = srcfile.split('/');
+        if (srcsplt.length > 1) {
+          srcsplt.pop();
+          srcpath = srcsplt.join('/');
+        }
+      }
+      let srclibrary = 'files';
+      let libraries = [{ name: 'files' }];
+
+      // this is SaveAs, so set readonly to false explicitly
+      let destDialogData = {
+        isReadonly: true,
+        index: 0,
+        browseResults: {
+          //tab: this.extraInfo[item].tab,
+          fileLocation: srclibrary,
+          file: srcfile,
+          path: srcpath,
+          exts: undefined,
+          OK: false,
+          type: '',
+        },
+        subMenuItems: [
+          {
+            name: 'Browse',
+            id: 'browse',
+            that: null,
+            function: null, // not used here
+            content: {
+              type: 'browse',
+            },
+          },
+        ],
+        libraries: libraries,
+        defaultLibrary: srclibrary,
+        parent: this,
+        filetype: [],
+        selectedType: undefined,
+        defaultType: undefined,
+      };
+
+      const exts = [];
+      // BE SURE TO ONLY PUSH LOWER CASE
+      destDialogData.defaultLibrary = 'files';
+
+      // push filetypes you'd like to see
+      exts.push('srtad');
+      exts.push('esf');
+      exts.push('pac');
+      exts.push('fpc');
+      exts.push('stl');
+      exts.push('srt');
+      exts.push('sif');
+      exts.push('xml');
+      exts.push('ttml');
+      exts.push('dfxp');
+      exts.push('scc');
+      exts.push('vtt');
+      destDialogData.browseResults.exts = exts;
+
+      // function defined here... not in class.
+      const onSaveAsDialogClosed = function () {
+        // note: we can access dialogdata and dialogData.browseResults
+        console.log('close browse of destination ', destDialogData);
+        if (destDialogData.browseResults.OK) {
+          let file = destDialogData.browseResults.file.split('.');
+          this.menuX(
+            this.dialogContent,
+            'sourcefile',
+            'value',
+            destDialogData.browseResults.file,
+          );
+          this.menuX(
+            this.dialogContent,
+            'sourcefile',
+            'library',
+            destDialogData.browseResults.fileLocation,
+          );
+          this.menuX(
+            this.dialogContent,
+            'sourcefile',
+            'filetype',
+            destDialogData.browseResults.type,
+          );
+        }
+      };
+
+      console.log('open browse of src ', destDialogData);
+
+      destDialogRef = this.appScope.dialogService.openDialog(
+        'FileBrowse',
+        null,
+        destDialogData,
+        onSaveAsDialogClosed.bind(this),
+      ); // note function created above
+    },
+
+    onClickDestinationfile: function () {
+      let srcfile = this.menuX(this.dialogContent, 'sourcefile', 'value');
+      let srcpath = '';
+      let srcsplt = srcfile.split('/');
+      if (srcsplt.length > 1) {
+        srcsplt.pop();
+        srcpath = srcsplt.join('/');
+      }
+      let srclibrary = 'files';
+      let libraries = [{ name: 'files' }];
+
+      // setup initial folder and name from src file, if not already set in menu option
+
+      // this includes path
+
+      let destDialogRef = undefined;
+
+      // this is SaveAs, so set readonly to false explicitly
+      let destDialogData = {
+        isReadonly: false,
+        index: 0,
+        browseResults: {
+          //tab: this.extraInfo[item].tab,
+          fileLocation: srclibrary,
+          file: srcfile,
+          path: srcpath,
+          exts: undefined,
+          OK: false,
+          type: '',
+        },
+        subMenuItems: [
+          {
+            name: 'Browse',
+            id: 'browse',
+            that: null,
+            function: null, // not used here
+            content: {
+              type: 'browse',
+            },
+          },
+        ],
+        libraries: libraries,
+        defaultLibrary: srclibrary,
+        parent: this,
+        filetype: undefined,
+        //path : this.path,
+        selectedType: undefined,
+        defaultType: undefined,
+      };
+
+      let filetypes = [];
+      let defaulttype = '';
+      let masterfiletypes = this.appScope.textEditorService.masterfiletypes;
+
+      const exts = [];
+      // BE SURE TO ONLY PUSH LOWER CASE
+      destDialogData.defaultLibrary = 'files';
+      filetypes.push(masterfiletypes.ad['srtad']);
+      filetypes.push(masterfiletypes.ad['esef']);
+
+      exts.push('srtad');
+      exts.push('esf');
+
+      filetypes.push(masterfiletypes.subtitle['pac']);
+      filetypes.push(masterfiletypes.subtitle['fpc']);
+      filetypes.push(masterfiletypes.subtitle['ebustl']);
+      filetypes.push(masterfiletypes.subtitle['srt']);
+      filetypes.push(masterfiletypes.subtitle['sif']);
+      filetypes.push(masterfiletypes.subtitle['xmlttml']);
+      filetypes.push(masterfiletypes.subtitle['ttml']);
+      filetypes.push(masterfiletypes.subtitle['dfxp']);
+      filetypes.push(masterfiletypes.subtitle['scc']);
+      filetypes.push(masterfiletypes.subtitle['vtt']);
+
+      defaulttype = masterfiletypes.subtitle['srt'].type;
+
+      exts.push('pac');
+      exts.push('fpc');
+      exts.push('stl');
+      exts.push('srt');
+      exts.push('sif');
+      exts.push('xml');
+      exts.push('ttml');
+      exts.push('dfxp');
+      exts.push('scc');
+      exts.push('vtt');
+
+      destDialogData.filetype = filetypes;
+      destDialogData.defaultType = defaulttype;
+      destDialogData.selectedType = defaulttype;
+      destDialogData.browseResults.exts = exts;
+
+      // function defined here... not in class.
+      const onSaveAsDialogClosed = function () {
+        // note: we can access dialogdata and dialogData.browseResults
+        console.log('close browse of destination ', destDialogData);
+        if (destDialogData.browseResults.OK) {
+          this.menuX(
+            this.dialogContent,
+            'destfile',
+            'value',
+            destDialogData.browseResults.file,
+          );
+          this.menuX(
+            this.dialogContent,
+            'destfile',
+            'library',
+            destDialogData.browseResults.fileLocation,
+          );
+          this.menuX(
+            this.dialogContent,
+            'destfile',
+            'filetype',
+            destDialogData.browseResults.type,
+          );
+        }
+      };
+
+      console.log('open browse of destination ', destDialogData);
+
+      destDialogRef = this.appScope.dialogService.openDialog(
+        'FileBrowse',
+        null,
+        destDialogData,
+        onSaveAsDialogClosed.bind(this),
+      ); // note function created above
     },
 
     onDialogClosed: function (res) {
@@ -269,13 +405,11 @@ module.exports = {
           var change = content.changes[i];
           switch (change.type) {
             case 'endUpdate':
-              this.loadTagList();
               break;
           }
         }
       }
     });
-    this.loadTagList();
 
     // defNavItems is the structure that adds items to the nav bar at the top.
     this.defNavItems = [
@@ -316,7 +450,7 @@ module.exports = {
       },
     ];
 
-    // Getting a unique idea by using the id of this vue element.
+    // Getting a unique id by using the id of this vue component.
     const id = this.appScope.config.id;
     this.appScope.contextMenuService.addMenuItems(this.customDialogMenuItems, 'columnheader', id);
     
@@ -335,29 +469,29 @@ module.exports = {
       // menuItems is where you construct the options within a dialog
       menuItems: [
         {
-          type: 'select',
-          id: 'selectfile',
+          type: 'file',
+          id: 'sourcefile',
           placeholder: 'Select first file.',
-          label: 'Select file to append to',
-          options: [],
+          label: 'Input File',
+          readonly: false,
           value: '',
-          noClose: true,
+          onClick: this.onClickSourcefile.bind(this),
           title: 'Lists and allows selection from available files',
         },
         {
-          type: 'select',
-          id: 'selectfile2',
-          placeholder: 'Select file to append to the above',
-          label: 'Select second file',
-          options: [],
+          type: 'savefile',
+          id: 'destfile',
+          placeholder: '',
+          label: 'Output File',
+          readonly: false,
           value: '',
-          noClose: true,
-          title: 'Lists and allows selection from available files',
+          onClick: this.onClickDestinationfile.bind(this),
+          title: 'Path where new file will be created',
         },
         {
           type: 'button',
           id: 'render',
-          label: 'Append',
+          label: 'Action',
           onClick: this.onClickAlign.bind(this),
           title: 'Write the first file to the new file.',
         },
